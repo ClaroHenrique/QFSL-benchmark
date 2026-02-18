@@ -1,0 +1,111 @@
+import itertools
+import csv
+
+def average(lst):
+    if not lst:
+        raise ValueError("Empty list to compute average")
+    return sum(lst) / len(lst) if lst else 0
+
+def stddev(lst):
+    if len(lst) < 2:
+        raise ValueError("Stddev requires at least two elements")
+    avg = average(lst)
+    variance = sum((x - avg) ** 2 for x in lst) / (len(lst) - 1)
+    return variance ** 0.5
+
+# Columns that define an unique experiment
+important_columns = [
+    "model_name", "split_point", "dataset_name", "batch_size"
+]
+
+# run_id,model_name,quantization_type,split_point,dataset_name,batch_size,mem-peak-mb,mem-first-mb,mem-usage-mb,time,bandwidth,model-size
+
+#Columns to remove from the summary file
+metric_columns = [
+    "mem-usage-mb", "time", "bandwidth", "model-size",
+]
+configs_done = {}
+
+dict_mems = {}
+dict_times = {}
+
+dict_mems_quant = {}
+dict_times_quant = {}
+
+with open("experiments/inference_results.csv", "r", newline="") as f:
+    leitor = csv.DictReader(f)
+    for linha in leitor:
+        key = tuple((linha[col] for col in important_columns))
+        if key not in configs_done:
+            dict_mems[key] = []
+            dict_times[key] = []
+            dict_mems_quant[key] = []
+            dict_times_quant[key] = []
+            configs_done[key] = dict((col, linha[col]) for col in important_columns)
+
+        if linha["quantization_type"] == "full":
+            configs_done[key]["model-size"] = linha["model-size"]
+            configs_done[key]["bandwidth"] = linha["bandwidth"]
+            dict_mems[key].append(float(linha["mem-usage-mb"]))
+            dict_times[key].append(float(linha["time"]))
+        else:
+            configs_done[key]["model-size-quant"] = linha["model-size"]
+            configs_done[key]["bandwidth-quant"] = linha["bandwidth"]
+            dict_mems_quant[key].append(float(linha["mem-usage-mb"]))
+            dict_times_quant[key].append(float(linha["time"]))
+
+
+for key, config in configs_done.items():
+    # full
+    mems = dict_mems[key]
+    times = dict_times[key]
+
+    config["time-avg"] = average(times)
+    config["time-std"] = stddev(times)
+    config["mem-usage-mb-avg"] = average(mems)
+    config["mem-usage-mb-std"] = stddev(mems)
+
+    # quantized
+    mems_quant = dict_mems_quant[key]
+    times_quant = dict_times_quant[key]
+
+    config["time-avg-quant"] = average(times_quant)
+    config["time-std-quant"] = stddev(times_quant)
+    config["time-avg-speedup"] = config["time-avg"] / config["time-avg-quant"] if config["time-avg-quant"] > 0 else 0
+    
+    config["mem-usage-mb-avg-quant"] = average(mems_quant)
+    config["mem-usage-mb-std-quant"] = stddev(mems_quant)
+    config["mem-usage-mb-reduction"] = 1 - config["mem-usage-mb-avg-quant"] / config["mem-usage-mb-avg"]
+
+    config["model-size-kb"] = int(config["model-size"]) / 1024
+    config["model-size-quant-kb"] = int(config["model-size-quant"]) / 1024
+    config["model-size-reduction"] = (1 - config["model-size-quant-kb"] / config["model-size-kb"])*100                                   
+
+    config["bandwidth-mb"] = int(config["bandwidth"]) / (1024 * 1024)
+    config["bandwidth-quant-mb"] = int(config["bandwidth-quant"]) / (1024 * 1024)
+    config["bandwidth-reduction"] = (1 - config["bandwidth-quant-mb"] / config["bandwidth-mb"])*100
+
+    config["sample-size"] = len(mems)
+
+
+print("configs_done:", configs_done)
+print("Examples of configs_done values:", list(configs_done.values())[:2])
+# save configs_done to a csv file
+with open("experiments/inference_summary_results.csv", "w", newline="") as f:
+    keys = next(iter(configs_done.values())).keys()
+
+    for metric in metric_columns:
+        columns = important_columns[:]
+        for col in list(configs_done.values())[0].keys():
+            print("is metric in col?", metric,"in", col,"=", metric in col)
+            if col not in important_columns and metric in col:
+                columns.append(col)
+        print("Writing metric:", metric, "with columns:", columns)
+        writer = csv.DictWriter(f, fieldnames=columns)
+        writer.writeheader()
+        for config in configs_done.values():
+            config_filtered = dict([(col,val) for col, val in list(config.items()) if col in columns])
+            writer.writerow(config_filtered)
+        writer.writerow({})
+        
+

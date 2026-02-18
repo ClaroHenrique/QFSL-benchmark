@@ -1,0 +1,4 @@
+model_name,quantization_type,dataset_name,split_point,num_clients,image_sizes,client_batch_size
+VGG11_bn, ptq, Cifar10_IID, 3, 1, 224 224, 64, 
+MobileNetV2, ptq, Cifar10_IID, 3, 1, 224 224, 64, 
+MobileNetV2, ptq, Cifar10_IID, 4, 1, 224 224, 64, 

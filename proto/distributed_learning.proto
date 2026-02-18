@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package distributed_learning;
+
+service DistributedClient {
+  // Initialize client
+  rpc Initialize(Dictionary) returns (Empty) {}
+  
+  // Training model
+  rpc Forward(Query) returns (Tensor) {}
+  rpc Backward(TensorWithLR) returns (Query) {}
+
+  // Aggregate model
+  rpc GetModelState(Empty) returns (ModelState) {}
+  rpc SetModelState(ModelState) returns (Empty) {}
+
+  // Quantize model
+  rpc GenerateQuantizedModel(Empty) returns (Empty) {}
+
+  // Test model precision
+  rpc TestInference(Query) returns (TensorWithMeasure) {}
+  rpc TestQuantizedInference(Query) returns (TensorWithMeasure) {}
+}
+
+message Dictionary {
+  bytes dictionary = 1;
+}
+
+message Query {
+  int32 batch_size = 1;
+  int32 request_id = 2;
+  int32 status = 3;
+}
+
+message Tensor {
+  bytes tensor = 1;
+  bytes label = 2;
+  int32 request_id = 3;
+}
+
+message ModelState {
+  bytes state = 1;
+}
+
+message Measure {
+  bytes measure = 1;
+}
+
+message TensorWithMeasure {
+  Tensor tensor = 1;
+  Measure measure = 2;
+}
+
+message TensorWithLR {
+  Tensor tensor = 1;
+  float learning_rate = 2;
+}
+
+message Empty {}
